@@ -1,67 +1,54 @@
-// SPDX-License-Identifier: UNLICENSED
+struct Proposal {
+    string title;
+    uint endBlock;
+    uint yeas;
+    uint noes;
+}
 
-pragma solidity ^0.8.19;
+contract Voting {
+    event ProposalCreated(uint id);
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/utils/Context.sol";
-
-contract Voting is Context {
-
-    struct Proposal {
-        address author;
-        string title;
-        string description;
-        uint endblock;
-        uint yeas;
-        uint noes;
-       // 
-    }
-
-    // struct Voters {
-    //     uint idVote;
-    //     uint vote;
-    //     bool voted;
-    // }
     ERC20 public votingToken;
-    constructor(address _votingToken){
-        votingToken = ERC20(_votingToken);
+    mapping(uint => Proposal) public proposals;
+    uint public proposalCounter = 0;
+
+    constructor(address tokenAddress) {
+        votingToken = ERC20(tokenAddress);
     }
 
-    mapping(uint => Proposal) public proposals;
-    //mapping (uint => mapping(address => uint)) voters;
-    // mapping(uint =>)
-    uint public proposalCount;
+    function createProposal(string memory title, uint endBlock) public  {
+        require(bytes(title).length > 0, "title is empty");
+        require(endBlock > block.number, "endBlock is in the past");
 
-    function createProposal(string memory _description,string memory _title, uint _endblock) public {
-        require(_endblock > block.number, "Endblock must be in the future");
-        require(_msgSender() != address(0));
-
-        proposals[proposalCount] = Proposal({
-            author: msg.sender,
-            title: _title,
-            description: _description,
-            endblock: _endblock,
+        uint proposalId = proposalCounter;
+        proposals[proposalId] = Proposal({
+            title: title,
+            endBlock : endBlock,
             yeas: 0,
             noes: 0
-            
         });
-        
-        // Initialisation du mapping voters
-       // proposals[proposalCount].voters = new mapping(address => uint256);
-        proposalCount++;
+
+        proposalCounter++;
+        emit ProposalCreated(proposalId);
     }
 
-    function voteYes(uint _idVote) public {
-        require(votingToken.balanceOf(_msgSender()) > 0, "You have no token to vote" );
-        require(block.timestamp < proposals[_idVote].endblock);
-        //require(proposals[_idVote].author != _msgSender(), "You can't vote as the author of the proposal!");
-        proposals[_idVote].yeas++;
+    function voteYes(uint proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
+
+        require(proposal.endBlock > block.number, "proposal already ended");
+        proposal.yeas = proposal.yeas + votingToken.balanceOf(msg.sender);
     }
 
-    function voteNo(uint _idVote) public {
-        require(votingToken.balanceOf(_msgSender()) > 0, "You have no token to vote" );
-        require(block.timestamp < proposals[_idVote].endblock);
-       // require(proposals[_idVote].author != _msgSender(), "You can't vote as the author of the proposal!");
-        proposals[_idVote].noes++;
+    function voteNo(uint proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
+
+        require(proposal.endBlock < block.number, "proposal already ended");
+        proposal.noes = proposal.noes + votingToken.balanceOf(msg.sender);
+    }
+
+    function passed(uint proposalId) public view returns(bool) {
+        Proposal storage proposal = proposals[proposalId];
+        require(proposal.endBlock <= block.number, "proposal not ended");
+        return proposal.yeas > proposal.noes;
     }
 }
